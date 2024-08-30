@@ -1,31 +1,29 @@
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
 #include <iostream>
 #include <vector>
+#include <chrono>
 
 // Estructura para almacenar la información de una burbuja
 struct Bubble {
     int x, y;
     int radius;
-    int velX, velY; // Velocidades en X y Y
+    int velX, velY;
     SDL_Color color;
 };
 
 // Prototipo de la función DrawCircle
 void DrawCircle(SDL_Renderer* renderer, int x, int y, int radius);
 
-// Función para dibujar una burbuja con gradiente
 void DrawBubble(SDL_Renderer* renderer, int x, int y, int radius, SDL_Color baseColor) {
-    // Dibujar burbuja con gradiente
     for (int r = radius; r > 0; --r) {
         SDL_SetRenderDrawColor(renderer, baseColor.r, baseColor.g, baseColor.b, baseColor.a - (radius - r) * 2);
         DrawCircle(renderer, x, y, r);
     }
-
-    // Añadir reflejo en la parte superior izquierda
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 150); // Blanco semitransparente
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 150);
     DrawCircle(renderer, x - radius / 3, y - radius / 3, radius / 4);
 }
 
@@ -58,12 +56,10 @@ void DrawCircle(SDL_Renderer* renderer, int x, int y, int radius) {
     }
 }
 
-// Función para calcular la distancia entre dos puntos
 float distance(int x1, int y1, int x2, int y2) {
     return std::sqrt(std::pow(x2 - x1, 2) + std::pow(y2 - y1, 2));
 }
 
-// Función para generar nuevas burbujas
 void GenerateBubbles(std::vector<Bubble>& bubbles, int numBubbles, int windowWidth, int windowHeight) {
     for (int i = 0; i < numBubbles; ++i) {
         int radius = 20 + std::rand() % 30;
@@ -71,18 +67,36 @@ void GenerateBubbles(std::vector<Bubble>& bubbles, int numBubbles, int windowWid
         int x = radius + std::rand() % (windowWidth - 2 * radius);
         int y = radius + std::rand() % (windowHeight - 2 * radius);
 
-        // Generar velocidades aleatorias para la burbuja
         int velX = (std::rand() % 5) + 1;
         int velY = (std::rand() % 5) + 1;
 
-        // Generar un color aleatorio para la burbuja
-        Uint8 red = static_cast<Uint8>(100 + std::rand() % 156);  // Rango entre 100 y 255
+        Uint8 red = static_cast<Uint8>(100 + std::rand() % 156);
         Uint8 green = static_cast<Uint8>(100 + std::rand() % 156);
         Uint8 blue = static_cast<Uint8>(100 + std::rand() % 156);
         SDL_Color bubbleColor = {red, green, blue, 128};
 
         bubbles.push_back({x, y, radius, velX, velY, bubbleColor});
     }
+}
+
+// Función para mostrar el texto de FPS en la pantalla
+void RenderFPS(SDL_Renderer* renderer, TTF_Font* font, int fps) {
+    SDL_Color white = {255, 255, 255, 255};
+    std::string fpsText = "FPS: " + std::to_string(fps);
+
+    SDL_Surface* surfaceMessage = TTF_RenderText_Solid(font, fpsText.c_str(), white);
+    SDL_Texture* message = SDL_CreateTextureFromSurface(renderer, surfaceMessage);
+
+    SDL_Rect messageRect;
+    messageRect.x = 10; // Posición X
+    messageRect.y = 10; // Posición Y
+    messageRect.w = 100; // Ancho del texto
+    messageRect.h = 50;  // Alto del texto
+
+    SDL_RenderCopy(renderer, message, nullptr, &messageRect);
+
+    SDL_FreeSurface(surfaceMessage);
+    SDL_DestroyTexture(message);
 }
 
 int main(int argc, char* argv[]) {
@@ -93,16 +107,20 @@ int main(int argc, char* argv[]) {
 
     int numBubbles = std::atoi(argv[1]);
 
-    // Inicializar SDL
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         SDL_Log("Error al inicializar SDL: %s", SDL_GetError());
+        return -1;
+    }
+
+    if (TTF_Init() < 0) {
+        SDL_Log("Error al inicializar SDL_ttf: %s", TTF_GetError());
+        SDL_Quit();
         return -1;
     }
 
     const int windowWidth = 640;
     const int windowHeight = 480;
 
-    // Crear la ventana
     SDL_Window* window = SDL_CreateWindow("Burbujas",
                                           SDL_WINDOWPOS_CENTERED,
                                           SDL_WINDOWPOS_CENTERED,
@@ -115,7 +133,6 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    // Crear el renderer
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
     if (renderer == nullptr) {
@@ -125,17 +142,27 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    // Semilla para generar números aleatorios
+    TTF_Font* font = TTF_OpenFont("font.otf", 24);
+    if (!font) {
+        SDL_Log("Error al cargar la fuente: %s", TTF_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return -1;
+    }
+
     std::srand(std::time(nullptr));
 
-    // Crear un vector de burbujas
     std::vector<Bubble> bubbles;
     GenerateBubbles(bubbles, numBubbles, windowWidth, windowHeight);
 
     bool running = true;
     SDL_Event event;
 
-    // Bucle principal
+    auto startTime = std::chrono::high_resolution_clock::now();
+    int frameCount = 0;
+    int fps = 0;
+
     while (running) {
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
@@ -143,28 +170,21 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Obtener la posición del mouse
         int mouseX, mouseY;
         SDL_GetMouseState(&mouseX, &mouseY);
 
-        // Limpiar pantalla
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
 
-        // Actualizar la posición de las burbujas y dibujarlas
         for (auto it = bubbles.begin(); it != bubbles.end(); ) {
-            // Comprobar si el mouse está dentro de la burbuja
             if (distance(mouseX, mouseY, it->x, it->y) <= it->radius) {
-                // Eliminar la burbuja (estalla)
                 it = bubbles.erase(it);
                 continue;
             }
 
-            // Actualizar la posición
             it->x += it->velX;
             it->y += it->velY;
 
-            // Rebotar en los bordes de la pantalla
             if (it->x - it->radius < 0 || it->x + it->radius > windowWidth) {
                 it->velX = -it->velX;
             }
@@ -172,25 +192,33 @@ int main(int argc, char* argv[]) {
                 it->velY = -it->velY;
             }
 
-            // Dibujar la burbuja
             DrawBubble(renderer, it->x, it->y, it->radius, it->color);
 
             ++it;
         }
 
-        // Verificar si todas las burbujas estallaron
         if (bubbles.empty()) {
             GenerateBubbles(bubbles, numBubbles, windowWidth, windowHeight);
         }
 
-        // Presentar lo que se ha dibujado
+        frameCount++;
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count();
+        if (elapsedTime >= 1000) {
+            fps = frameCount / (elapsedTime / 1000.0f);
+            frameCount = 0;
+            startTime = currentTime;
+        }
+
+        RenderFPS(renderer, font, fps);
+
         SDL_RenderPresent(renderer);
 
-        // Pequeño retraso para no sobrecargar la CPU
-        SDL_Delay(16); // Aproximadamente 60 FPS
+        SDL_Delay(16);
     }
 
-    // Limpiar recursos
+    TTF_CloseFont(font);
+    TTF_Quit();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
