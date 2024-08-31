@@ -142,7 +142,9 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    TTF_Font* font = TTF_OpenFont("font.otf", 24);
+//    TTF_Font* font = TTF_OpenFont("font.otf", 24);
+    TTF_Font* font = TTF_OpenFont("/mnt/c/Users/Jennifer/OneDrive/Escritorio/Proyecto1-Paralela/secuencial/font.otf", 24);
+
     if (!font) {
         SDL_Log("Error al cargar la fuente: %s", TTF_GetError());
         SDL_DestroyRenderer(renderer);
@@ -159,11 +161,15 @@ int main(int argc, char* argv[]) {
     bool running = true;
     SDL_Event event;
 
+    // Medición del tiempo de ejecución total
+    auto startExecutionTime = std::chrono::high_resolution_clock::now();
     auto startTime = std::chrono::high_resolution_clock::now();
     int frameCount = 0;
     int fps = 0;
+    int totalTime = 0; 
 
     while (running) {
+        auto frameStart = std::chrono::high_resolution_clock::now(); // Inicio del frame actual
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
                 running = false;
@@ -176,25 +182,31 @@ int main(int argc, char* argv[]) {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
 
-        for (auto it = bubbles.begin(); it != bubbles.end(); ) {
-            if (distance(mouseX, mouseY, it->x, it->y) <= it->radius) {
-                it = bubbles.erase(it);
+        // Paralelización con OpenMP en el ciclo de burbujas
+        #pragma omp parallel for
+        for (int i = 0; i < bubbles.size(); ++i) {
+            if (distance(mouseX, mouseY, bubbles[i].x, bubbles[i].y) <= bubbles[i].radius) {
+                #pragma omp critical
+                {
+                    bubbles.erase(bubbles.begin() + i);
+                }
                 continue;
             }
 
-            it->x += it->velX;
-            it->y += it->velY;
+            bubbles[i].x += bubbles[i].velX;
+            bubbles[i].y += bubbles[i].velY;
 
-            if (it->x - it->radius < 0 || it->x + it->radius > windowWidth) {
-                it->velX = -it->velX;
+            if (bubbles[i].x - bubbles[i].radius < 0 || bubbles[i].x + bubbles[i].radius > windowWidth) {
+                bubbles[i].velX = -bubbles[i].velX;
             }
-            if (it->y - it->radius < 0 || it->y + it->radius > windowHeight) {
-                it->velY = -it->velY;
+            if (bubbles[i].y - bubbles[i].radius < 0 || bubbles[i].y + bubbles[i].radius > windowHeight) {
+                bubbles[i].velY = -bubbles[i].velY;
             }
 
-            DrawBubble(renderer, it->x, it->y, it->radius, it->color);
-
-            ++it;
+            #pragma omp critical
+            {
+                DrawBubble(renderer, bubbles[i].x, bubbles[i].y, bubbles[i].radius, bubbles[i].color);
+            }
         }
 
         if (bubbles.empty()) {
@@ -214,8 +226,19 @@ int main(int argc, char* argv[]) {
 
         SDL_RenderPresent(renderer);
 
+        auto frameEnd = std::chrono::high_resolution_clock::now(); // Fin del frame actual
+        int frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart).count();
+        totalTime += frameDuration; // Acumular el tiempo total de renderizado
+
+
         SDL_Delay(16);
     }
+
+    auto endExecutionTime = std::chrono::high_resolution_clock::now();
+    auto totalExecutionTime = std::chrono::duration_cast<std::chrono::milliseconds>(endExecutionTime - startExecutionTime).count();
+
+    std::cout << "Tiempo total de ejecución: " << totalExecutionTime << " ms\n";
+    std::cout << "Tiempo promedio por cuadro: " << (totalTime / frameCount) << " ms\n";
 
     TTF_CloseFont(font);
     TTF_Quit();
