@@ -6,6 +6,8 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
+#include <cctype> 
+#include <cstring> 
 
 // Estructura para almacenar la información de una burbuja
 struct Bubble {
@@ -99,9 +101,22 @@ void RenderFPS(SDL_Renderer* renderer, TTF_Font* font, int fps) {
     SDL_DestroyTexture(message);
 }
 
+bool isNumber(const char* str) {
+    for (int i = 0; i < strlen(str); i++) {
+        if (!std::isdigit(str[i]))
+            return false;
+    }
+    return true;
+}
+
 int main(int argc, char* argv[]) {
     if (argc != 2) {
-        std::cerr << "Uso: " << argv[0] << " <cantidad de burbujas>" << std::endl;
+        std::cerr << "Uso: " << argv[0] << " <cantidad de burbujas>\n";
+        return -1;
+    }
+
+    if (!isNumber(argv[1])) {
+        std::cerr << "Error: Se esperaba un número para la cantidad de burbujas.\n";
         return -1;
     }
 
