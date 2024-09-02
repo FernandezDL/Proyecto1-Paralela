@@ -1,8 +1,6 @@
 <h1 align="center">
  🫧 Burbujas Protector de Pantalla 🫧 
 </h1>
-(https://github.com/user-attachments/assets/719eb2f8-676f-4dbe-a00a-bfd03154de6b)
-
 
 
 #### Descripción del Proyecto
